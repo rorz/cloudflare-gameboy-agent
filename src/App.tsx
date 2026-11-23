@@ -1,6 +1,5 @@
 import { MgbaPlay } from "@wasm-gaming/mgba-wasm";
 import { useEffect, useRef, useState } from "react";
-import cloudflareMark from "./assets/cloudflare.svg";
 import mainboard from "./assets/cloudboy-mainboard.svg";
 import regulator from "./assets/cloudboy-regulator.svg";
 import GameBoyControls from "./GameBoyControls";
@@ -43,7 +42,9 @@ export default function App() {
   const activeGame = useRef<MgbaPlay | null>(null);
   const stopped = useRef(Promise.resolve());
   const [cartridge, setCartridge] = useState<Cartridge | null>(null);
-  const [status, setStatus] = useState<"idle" | "loading" | "playing" | "error">("idle");
+  const [status, setStatus] = useState<
+    "idle" | "loading" | "playing" | "error"
+  >("idle");
 
   useEffect(() => {
     const canvas = screen.current;
@@ -75,8 +76,14 @@ export default function App() {
           const y = (framebuffer.height - gameBoyHeight) / 2;
           context.drawImage(
             framebuffer,
-            x, y, gameBoyWidth, gameBoyHeight,
-            0, 0, gameBoyWidth, gameBoyHeight,
+            x,
+            y,
+            gameBoyWidth,
+            gameBoyHeight,
+            0,
+            0,
+            gameBoyWidth,
+            gameBoyHeight,
           );
         });
         await game.restart();
@@ -104,11 +111,13 @@ export default function App() {
       unsubscribeFrame?.();
       window.removeEventListener("blur", releaseKeys);
       if (activeGame.current === game) activeGame.current = null;
-      stopped.current = startup.then(async () => {
-        await game?.destroy();
-      }).catch((error) => {
-        console.error("Could not stop mGBA", error);
-      });
+      stopped.current = startup
+        .then(async () => {
+          await game?.destroy();
+        })
+        .catch((error) => {
+          console.error("Could not stop mGBA", error);
+        });
     };
   }, [cartridge]);
 
@@ -126,20 +135,18 @@ export default function App() {
     <main className="game-page overflow-clip px-2 text-stone-100 sm:px-6">
       <div className="game-layout relative mx-auto grid h-dvh w-full max-w-[1320px] grid-rows-[auto_minmax(0,1fr)]">
         <header className="game-header z-20 grid items-center px-1">
-          <h1 className="flex items-center gap-2.5 text-[13px] font-semibold tracking-[-0.02em] text-stone-200">
-            <img src={cloudflareMark} alt="" className="h-auto w-7" />
-            Cloudboy Color
-          </h1>
-          <button
-            type="button"
-            className="game-title cursor-pointer justify-self-end whitespace-nowrap rounded-md border border-orange-400/35 bg-orange-400/10 px-2.5 py-1 text-xs font-semibold text-orange-100 hover:bg-orange-400/20"
-            onClick={openPicker}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") event.stopPropagation();
-            }}
-          >
-            Choose ROM
-          </button>
+          {(status === "playing" || status === "loading") && (
+            <button
+              type="button"
+              className="game-header-action cursor-pointer justify-self-end whitespace-nowrap rounded-md border border-orange-400/35 bg-orange-400/10 px-2.5 py-1 text-xs font-semibold text-orange-100 hover:bg-orange-400/20"
+              onClick={openPicker}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.stopPropagation();
+              }}
+            >
+              Choose ROM
+            </button>
+          )}
           <dl
             id="keymap"
             aria-label="Keyboard controls"
@@ -163,10 +170,25 @@ export default function App() {
 
         <div className="game-stage relative isolate flex items-end justify-center rounded-2xl sm:rounded-3xl">
           <div className="game-device relative z-10 select-none">
-            <div className="game-body relative isolate" role="group" aria-label="Cloudboy Color">
-              <div aria-hidden="true" className="shell-interior pointer-events-none absolute overflow-hidden">
-                <img src={mainboard} alt="" className="shell-mainboard absolute inset-0 h-full w-full object-fill" />
-                <img src={regulator} alt="" className="shell-regulator absolute" />
+            <div
+              className="game-body relative isolate"
+              role="group"
+              aria-label="Cloudboy Color"
+            >
+              <div
+                aria-hidden="true"
+                className="shell-interior pointer-events-none absolute overflow-hidden"
+              >
+                <img
+                  src={mainboard}
+                  alt=""
+                  className="shell-mainboard absolute inset-0 h-full w-full object-fill"
+                />
+                <img
+                  src={regulator}
+                  alt=""
+                  className="shell-regulator absolute"
+                />
                 <span className="shell-rail shell-rail-left absolute" />
                 <span className="shell-rail shell-rail-right absolute" />
                 <span className="shell-clip absolute left-[12%]" />
@@ -178,13 +200,24 @@ export default function App() {
                 <span className="shell-screw absolute right-[6%] top-[74%]" />
                 <span className="shell-screw absolute right-[32%] top-[81%]" />
               </div>
-              <div aria-hidden="true" className="shell-switch pointer-events-none absolute" />
+              <div
+                aria-hidden="true"
+                className="shell-switch pointer-events-none absolute"
+              />
 
               <div className="game-lens absolute z-10">
-                <div aria-hidden="true" className="game-power absolute flex flex-col items-center" data-powered={status === "playing"}>
+                <div
+                  aria-hidden="true"
+                  className="game-power absolute flex flex-col items-center"
+                  data-powered={status === "playing"}
+                >
                   <span className="power-indicator flex items-center">
                     <span className="power-light" />
-                    <span className="power-waves flex items-center"><span /><span /><span /></span>
+                    <span className="power-waves flex items-center">
+                      <span />
+                      <span />
+                      <span />
+                    </span>
                   </span>
                   <span className="font-mono font-semibold">POWER</span>
                 </div>
@@ -197,26 +230,66 @@ export default function App() {
                     aria-describedby="keymap"
                     className="block h-auto w-full [image-rendering:pixelated]"
                   />
-                  {status === "idle" && <p className="game-message absolute px-2 text-center">Choose a ROM to play.</p>}
-                  {status === "loading" && <p role="status" className="game-message absolute">Starting ROM…</p>}
-                  {status === "error" && <p role="alert" className="game-message absolute px-2 text-center">Couldn’t start this ROM.</p>}
+                  {status === "loading" && (
+                    <p role="status" className="game-message absolute">
+                      Starting ROM…
+                    </p>
+                  )}
+                  {(status === "idle" || status === "error") && (
+                    <div className="game-message absolute inset-0 grid content-center justify-items-center gap-[clamp(0.35rem,2.2cqw,0.9rem)] px-3 text-center">
+                      {status === "idle" ? (
+                        <h1 className="font-medium">Load a ROM to start...</h1>
+                      ) : (
+                        <p role="alert">Couldn’t start this ROM.</p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={openPicker}
+                        className="min-h-[clamp(2.125rem,13cqw,3.125rem)] w-full max-w-48 cursor-pointer rounded-lg bg-[#f6821f] px-2 text-[clamp(0.7rem,3cqw,0.975rem)] font-semibold text-[#251306] shadow-[inset_0_1px_0_#ffd09a,0_5px_14px_#0008] hover:bg-[#ffac58] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-200"
+                      >
+                        Choose ROM
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <div aria-hidden="true" className="game-model absolute flex items-baseline justify-center font-black italic leading-none">
+                <div
+                  aria-hidden="true"
+                  className="game-model absolute flex items-baseline justify-center font-black italic leading-none"
+                >
                   <span>CLOUDBOY</span>
-                  <span className="model-color"><span>C</span><span>O</span><span>L</span><span>O</span><span>R</span></span>
+                  <span className="model-color">
+                    <span>C</span>
+                    <span>O</span>
+                    <span>L</span>
+                    <span>O</span>
+                    <span>R</span>
+                  </span>
                 </div>
               </div>
 
-              <div aria-hidden="true" className="shell-stamp pointer-events-none absolute grid place-items-center" />
+              <div
+                aria-hidden="true"
+                className="shell-stamp pointer-events-none absolute grid place-items-center"
+              />
               <GameBoyControls disabled={status !== "playing"} />
-              <div aria-hidden="true" className="shell-speaker pointer-events-none absolute">
+              <div
+                aria-hidden="true"
+                className="shell-speaker pointer-events-none absolute"
+              >
                 <div className="speaker-face absolute">
                   {speakerHoles.map(({ key, left, top }) => (
-                    <span key={key} className="speaker-hole absolute" style={{ left, top }} />
+                    <span
+                      key={key}
+                      className="speaker-hole absolute"
+                      style={{ left, top }}
+                    />
                   ))}
                 </div>
               </div>
-              <div aria-hidden="true" className="shell-port pointer-events-none absolute" />
+              <div
+                aria-hidden="true"
+                className="shell-port pointer-events-none absolute"
+              />
             </div>
           </div>
         </div>
