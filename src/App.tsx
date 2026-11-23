@@ -1,5 +1,9 @@
 import { MgbaPlay } from "@wasm-gaming/mgba-wasm";
 import { useEffect, useRef, useState } from "react";
+import cloudflareMark from "./assets/cloudflare.svg";
+import mainboard from "./assets/cloudboy-mainboard.svg";
+import regulator from "./assets/cloudboy-regulator.svg";
+import GameBoyControls from "./GameBoyControls";
 
 // The SDK does not export its runtime assets as package subpaths.
 import mgbaScriptUrl from "../node_modules/@wasm-gaming/mgba-wasm/dist/mgba/mgba.js?url&no-inline";
@@ -18,6 +22,21 @@ const keymap = [
   { button: "Start", key: "Enter" },
   { button: "Select", key: "Right Shift" },
 ];
+
+const speakerHoles = [
+  { radius: 18, count: 7, offset: 0.3 },
+  { radius: 29, count: 12, offset: 0.08 },
+  { radius: 39, count: 16, offset: 0.18 },
+].flatMap(({ radius, count, offset }) =>
+  Array.from({ length: count }, (_, index) => {
+    const angle = (index / count) * Math.PI * 2 + offset;
+    return {
+      key: `${radius}-${index}`,
+      left: `${50 + Math.cos(angle) * radius}%`,
+      top: `${50 + Math.sin(angle) * radius}%`,
+    };
+  }),
+);
 
 export default function App() {
   const screen = useRef<HTMLCanvasElement>(null);
@@ -86,57 +105,104 @@ export default function App() {
   }, []);
 
   return (
-    <main className="grid min-h-dvh place-items-center bg-zinc-950 px-5 py-8 text-zinc-100">
-      <div className="w-full max-w-[480px]">
-        <h1 className="mb-3 text-lg font-medium">Pokémon Red</h1>
+    <main className="game-page overflow-clip px-2 text-stone-100 sm:px-6">
+      <div className="game-layout relative mx-auto grid h-dvh w-full max-w-[1320px] grid-rows-[auto_minmax(0,1fr)]">
+        <header className="game-header z-20 grid items-center px-1">
+          <div className="flex items-center gap-2.5 text-[13px] font-semibold tracking-[-0.02em] text-stone-200">
+            <img src={cloudflareMark} alt="" className="h-auto w-7" />
+            Cloudboy Color
+          </div>
+          <h1 className="game-title justify-self-end text-[13px] font-medium text-stone-300">Pokémon Red</h1>
+          <dl
+            id="keymap"
+            aria-label="Keyboard controls"
+            className="game-keymap flex flex-wrap justify-center gap-x-3 gap-y-1.5 text-[11px] font-medium text-stone-400"
+          >
+            {keymap.map(({ button, key, label }) => (
+              <div key={button} className="flex items-center gap-1.5">
+                <dt>{button}</dt>
+                <dd>
+                  <kbd
+                    aria-label={label}
+                    className="keycap inline-block min-w-5 rounded-sm px-1.5 py-0.5 text-center font-mono text-stone-200"
+                  >
+                    {key}
+                  </kbd>
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </header>
 
-        <div className="relative grid aspect-square w-full place-items-center overflow-hidden rounded-md bg-black ring-1 ring-white/15">
-          <canvas
-            ref={screen}
-            width={gameBoyWidth}
-            height={gameBoyHeight}
-            aria-label="Pokémon Red game screen"
-            aria-describedby="keymap"
-            className="h-auto w-full [image-rendering:pixelated]"
-          />
-          {status === "loading" && (
-            <p role="status" className="absolute text-sm text-zinc-400">
-              Loading ROM…
-            </p>
-          )}
-          {status === "error" && (
-            <div className="absolute text-center text-sm">
-              <p role="alert">Couldn’t start Pokémon Red.</p>
-              <button
-                type="button"
-                className="mt-3 cursor-pointer rounded border border-zinc-600 px-3 py-1.5 hover:bg-zinc-800"
-                onClick={() => window.location.reload()}
-              >
-                Retry
-              </button>
+        <div className="game-stage relative isolate flex items-end justify-center rounded-2xl sm:rounded-3xl">
+          <div className="game-device relative z-10 select-none">
+            <div className="game-body relative isolate" role="group" aria-label="Cloudboy Color">
+              <div aria-hidden="true" className="shell-interior pointer-events-none absolute overflow-hidden">
+                <img src={mainboard} alt="" className="shell-mainboard absolute inset-0 h-full w-full object-fill" />
+                <img src={regulator} alt="" className="shell-regulator absolute" />
+                <span className="shell-rail shell-rail-left absolute" />
+                <span className="shell-rail shell-rail-right absolute" />
+                <span className="shell-clip absolute left-[12%]" />
+                <span className="shell-clip absolute right-[12%]" />
+                <span className="shell-screw absolute left-[4%] top-[57%]" />
+                <span className="shell-screw absolute right-[13%] top-[54%]" />
+                <span className="shell-screw absolute left-[6%] top-[77%]" />
+                <span className="shell-screw absolute left-[40%] top-[69%]" />
+                <span className="shell-screw absolute right-[6%] top-[74%]" />
+                <span className="shell-screw absolute right-[32%] top-[81%]" />
+              </div>
+              <div aria-hidden="true" className="shell-switch pointer-events-none absolute" />
+
+              <div className="game-lens absolute z-10">
+                <div aria-hidden="true" className="game-power absolute flex flex-col items-center" data-powered={status === "playing"}>
+                  <span className="power-indicator flex items-center">
+                    <span className="power-light" />
+                    <span className="power-waves flex items-center"><span /><span /><span /></span>
+                  </span>
+                  <span className="font-mono font-semibold">POWER</span>
+                </div>
+                <div className="game-lcd absolute grid aspect-square place-items-center overflow-hidden">
+                  <canvas
+                    ref={screen}
+                    width={gameBoyWidth}
+                    height={gameBoyHeight}
+                    aria-label="Pokémon Red game screen"
+                    aria-describedby="keymap"
+                    className="block h-auto w-full [image-rendering:pixelated]"
+                  />
+                  {status === "loading" && <p role="status" className="game-message absolute">Loading ROM…</p>}
+                  {status === "error" && (
+                    <div className="game-message absolute px-2 text-center">
+                      <p role="alert">Couldn’t start Pokémon Red.</p>
+                      <button
+                        type="button"
+                        className="mt-2 cursor-pointer rounded border border-stone-600 px-2.5 py-1 hover:bg-stone-800"
+                        onClick={() => window.location.reload()}
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div aria-hidden="true" className="game-model absolute flex items-baseline justify-center font-black italic leading-none">
+                  <span>CLOUDBOY</span>
+                  <span className="model-color"><span>C</span><span>O</span><span>L</span><span>O</span><span>R</span></span>
+                </div>
+              </div>
+
+              <div aria-hidden="true" className="shell-stamp pointer-events-none absolute grid place-items-center" />
+              <GameBoyControls disabled={status !== "playing"} />
+              <div aria-hidden="true" className="shell-speaker pointer-events-none absolute">
+                <div className="speaker-face absolute">
+                  {speakerHoles.map(({ key, left, top }) => (
+                    <span key={key} className="speaker-hole absolute" style={{ left, top }} />
+                  ))}
+                </div>
+              </div>
+              <div aria-hidden="true" className="shell-port pointer-events-none absolute" />
             </div>
-          )}
+          </div>
         </div>
-
-        <dl
-          id="keymap"
-          aria-label="Keyboard controls"
-          className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs text-zinc-300"
-        >
-          {keymap.map(({ button, key, label }) => (
-            <div key={button} className="flex items-center gap-2">
-              <dt>{button}</dt>
-              <dd>
-                <kbd
-                  aria-label={label}
-                  className="inline-block rounded border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-zinc-100"
-                >
-                  {key}
-                </kbd>
-              </dd>
-            </div>
-          ))}
-        </dl>
       </div>
     </main>
   );

@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 1002" fill="none">
+  <title>Cloudboy Color mainboard, contact side</title>
+  <desc>LCD and cartridge signal routing, button contacts, battery terminals, and audio and power connectors.</desc>
+  <defs>
+    <path id="board" d="M47 38h151l9 6h164l8-6h165v88h-10v65h17v116h-8v65h13v442h-69c-50 0-91 41-91 91v55H58l-24-15V796h7v-77h-8V536h8v-81H33V319h16v-63H35V126h12z"/>
+    <clipPath id="board-clip"><use href="#board"/></clipPath>
+    <linearGradient id="solder-mask" x1=".1" x2=".86" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#4d7a68"/><stop offset=".48" stop-color="#325648"/><stop offset="1" stop-color="#213b36"/>
+    </linearGradient>
+    <linearGradient id="lower-mask" x1=".1" x2=".85" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#c6cbb2"/><stop offset=".54" stop-color="#9fa991"/><stop offset="1" stop-color="#767d68"/>
+    </linearGradient>
+    <linearGradient id="metal" x2=".86" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#765f4b"/><stop offset=".25" stop-color="#f6e2bb"/><stop offset=".46" stop-color="#b6a589"/>
+      <stop offset=".72" stop-color="#6d6558"/><stop offset="1" stop-color="#bfad8c"/>
+    </linearGradient>
+    <linearGradient id="gold" x2=".75" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#e1bc6e"/><stop offset="1" stop-color="#9c6e3b"/>
+    </linearGradient>
+    <radialGradient id="magnet">
+      <stop offset=".07" stop-color="#a19a86"/><stop offset=".25" stop-color="#84776a"/><stop offset=".3" stop-color="#594b43"/>
+      <stop offset=".65" stop-color="#302d2b"/><stop offset=".74" stop-color="#57514a"/><stop offset=".85" stop-color="#312b29"/>
+      <stop offset=".92" stop-color="#605249"/><stop offset="1" stop-color="#292625"/>
+    </radialGradient>
+    <g id="via">
+      <circle r="3.7" fill="#9e895f" stroke="#d4c49a" stroke-width=".75"/>
+      <circle r="1.68" fill="#34433b"/>
+    </g>
+    <g id="mount">
+      <circle r="11" fill="#9aab90" stroke="#e4dbc0" stroke-width="1.3"/>
+      <circle r="7.5" fill="#433f35" stroke="#697568" stroke-width="1.3"/>
+    </g>
+    <g id="smd">
+      <rect x="-6" y="-2.6" width="12" height="5.2" rx=".65" fill="#293b35" stroke="#abb49b" stroke-width=".65"/>
+      <path d="M-5 0h2m6 0h2" stroke="#d4c3a2" stroke-width="3.1" stroke-linecap="square"/>
+    </g>
+    <pattern id="connector-pins" width="13.6" height="26" patternUnits="userSpaceOnUse">
+      <path d="M3.4 1h5.8v19H3.4z" fill="#625f53"/>
+      <rect x="3.4" y="6" width="5.8" height="16" rx="2.7" fill="url(#metal)"/>
+    </pattern>
+    <g id="pad-round">
+      <circle r="20" fill="url(#gold)" stroke="#437365" stroke-width="1.6"/>
+      <path d="M-20 0h40M0-20v40" stroke="#467b6c" stroke-width="5"/>
+      <path d="M-16-8a18 18 0 0 1 11-9m10 34a18 18 0 0 0 11-9" stroke="#f2d494" stroke-opacity=".7"/>
+    </g>
+    <g id="pad-face">
+      <circle r="26" fill="#879d83" stroke="#548276" stroke-width="1.5"/>
+      <path d="M-21-12Q-9-4-21 13m10-32Q3-4-11 21m11-46Q13-4 0 25m10-45Q22-4 10 21m10-32Q28-4 20 12"
+        stroke="url(#gold)" stroke-width="5"/>
+    </g>
+    <g id="pad-system">
+      <rect x="-31" y="-15" width="62" height="30" rx="2" fill="#52756a"/>
+      <path d="M-28-11h11l3 5-3 5h-11zm15 0h11l3 5-3 5h-11zm15 0h11l3 5-3 5H2zm15 0h11v10H17zM-28 2h11l3 5-3 5h-11zm15 0h11l3 5-3 5h-11zm15 0h11l3 5-3 5H2zm15 0h11v10H17z" fill="url(#gold)"/>
+    </g>
+  </defs>
+
+  <use href="#board" fill="url(#solder-mask)" stroke="#b1a97b" stroke-width="2"/>
+  <g clip-path="url(#board-clip)">
+    <path d="M22 509h542v462H22z" fill="url(#lower-mask)"/>
+    <path d="M46 565h86c59 0 108 46 108 102v113h-79a122 122 0 0 1-115-84zM345 649c11-28 38-40 72-51l74-24c32-10 58 13 68 44v67l-126 51c-55 18-101-26-88-87zM188 825c0-19 21-31 42-31h128c23 0 35 14 35 37v25c0 17-12 29-35 29H230c-27 0-42-14-42-36z"
+      fill="#cbd0b1" fill-opacity=".58" stroke="#547968" stroke-width="1.9"/>
+
+    <g stroke="#8baa88" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" opacity=".85">
+      <path d="M76 88h42l26 26h62l26 26h43l43 43v79l36 36v130l33 33v36M87 110h46l29 29h44l34 34h32l29 29v64l37 37v132l34 34v28M57 173h74l17-17h38l41 41h42l18 18v52l31 31v142l34 33v24M61 192h75l21-21h26l40 40h32l17 17v45l29 29v146l28 29v20M61 209h86l19-19h17l47 48h24v42l31 31v150l23 23v13M85 242h77l29-28h14l28 29v57l30 30v137l22 22v8"/>
+      <path d="M377 89h-60l-22 22h-35l-25 25v62M396 108h-65l-18 18h-38l-23 22v41M452 84h-49l-25 25v50l-34 34v58l35 35v102l42 42v68M483 94h-75l-17 17v58l-32 32v44l38 38v98l40 40v79M519 98h-33l-34 34v54l-41 41v45l17 17v84l43 42v83M530 116h-31l-32 32v39l-38 39v33l15 15v99l44 44v81M523 157h-23l-19 19v31l-29 29v23l18 18v88l45 43v90"/>
+      <path d="M102 300h51l35 35v77l-20 20v64M92 326h49l30 30v47l-19 19v74M78 352h54l18 18v26l-17 16v85M62 379h57l14 14-20 20v84M82 442h-17v54M534 321h-32l-24 23v34l33 33v40l16 16v32M534 351h-26l-13 13v13l38 38v30l12 12v40"/>
+    </g>
+    <g stroke="#6f8e77" stroke-width="1.4" stroke-linejoin="round" opacity=".63">
+      <path d="M138 602v-36l-16-16h-20v-26M82 664H67l-14-14v-81l12-12v-32M199 664h18v-46l-23-23v-70M139 738v17l30 30h60l41-41V599l33-33v-42M391 676h-40l-21-22v-82l44-44M493 633l-24-23v-36l22-22v-27M410 687l-39 42h-37l-18 18v44M251 831h-24l-22-23v-19M340 831h24l29-27v-52l42-40h36l29-28M266 861v25l-17 16v56M338 859v30l21 21v48M138 760l-22 24v40M466 688v57l-26 24h-29"/>
+    </g>
+
+    <g>
+      <use href="#via" x="76" y="88"/><use href="#via" x="87" y="110"/><use href="#via" x="61" y="192"/>
+      <use href="#via" x="78" y="352"/><use href="#via" x="102" y="300"/><use href="#via" x="133" y="413"/>
+      <use href="#via" x="207" y="188"/><use href="#via" x="237" y="167"/><use href="#via" x="249" y="99"/>
+      <use href="#via" x="286" y="172"/><use href="#via" x="308" y="86"/><use href="#via" x="319" y="130"/>
+      <use href="#via" x="346" y="109"/><use href="#via" x="377" y="89"/><use href="#via" x="396" y="108"/>
+      <use href="#via" x="456" y="163"/><use href="#via" x="485" y="149"/><use href="#via" x="523" y="157"/>
+      <use href="#via" x="534" y="321"/><use href="#via" x="534" y="351"/><use href="#via" x="457" y="422"/>
+      <use href="#via" x="253" y="430"/><use href="#via" x="274" y="430"/><use href="#via" x="289" y="416"/>
+      <use href="#via" x="102" y="550"/><use href="#via" x="161" y="585"/><use href="#via" x="228" y="641"/>
+      <use href="#via" x="195" y="719"/><use href="#via" x="109" y="713"/><use href="#via" x="148" y="684"/>
+      <use href="#via" x="231" y="765"/><use href="#via" x="280" y="767"/><use href="#via" x="303" y="797"/>
+      <use href="#via" x="368" y="639"/><use href="#via" x="425" y="631"/><use href="#via" x="483" y="607"/>
+      <use href="#via" x="527" y="590"/><use href="#via" x="533" y="645"/><use href="#via" x="349" y="719"/>
+      <use href="#via" x="368" y="797"/><use href="#via" x="366" y="906"/><use href="#via" x="220" y="898"/>
+    </g>
+
+    <path d="M76 468h454v40H76z" fill="#344038" stroke="#8d9f84" stroke-width="1.5"/>
+    <path d="M85 477h435v26H85z" fill="url(#connector-pins)"/>
+    <path d="M87 468v-11h418v11" stroke="#b7b79a" stroke-width="1.4"/>
+    <g fill="#cdd1af" font-size="9.5" font-family="monospace">
+      <text x="86" y="521">32</text><text x="172" y="521">25</text><text x="242" y="521">20</text>
+      <text x="310" y="521">15</text><text x="379" y="521">10</text><text x="447" y="521">5</text>
+      <text x="511" y="521">1</text>
+    </g>
+
+    <g>
+      <use href="#pad-round" x="136" y="602"/><use href="#pad-round" x="82" y="664"/>
+      <use href="#pad-round" x="199" y="664"/><use href="#pad-round" x="139" y="738"/>
+      <use href="#pad-face" x="397" y="674"/><use href="#pad-face" x="510" y="634"/>
+      <use href="#pad-system" x="242" y="838"/><use href="#pad-system" x="342" y="838"/>
+    </g>
+
+    <g fill="url(#metal)" stroke="#777362" stroke-width="1.2">
+      <rect x="433" y="574" width="30" height="24" rx="4"/><rect x="470" y="742" width="31" height="23" rx="4"/>
+      <rect x="239" y="900" width="15" height="23" rx="7"/><rect x="264" y="904" width="16" height="25" rx="7"/>
+      <rect x="303" y="898" width="15" height="26" rx="7"/><rect x="326" y="901" width="15" height="27" rx="7"/>
+      <rect x="349" y="907" width="14" height="23" rx="7"/><rect x="260" y="934" width="14" height="21" rx="7"/>
+      <rect x="306" y="934" width="15" height="22" rx="7"/><rect x="352" y="937" width="14" height="20" rx="7"/>
+    </g>
+    <g>
+      <use href="#mount" x="52" y="100"/><use href="#mount" x="539" y="100"/>
+      <use href="#mount" x="56" y="419"/><use href="#mount" x="537" y="425"/>
+      <use href="#mount" x="53" y="765"/><use href="#mount" x="542" y="730"/>
+      <use href="#mount" x="224" y="679"/><use href="#mount" x="459" y="690"/>
+      <use href="#smd" x="228" y="550"/><use href="#smd" x="308" y="688"/><use href="#smd" x="513" y="751"/>
+      <use href="#smd" x="291" y="792"/><use href="#smd" x="225" y="909"/><use href="#smd" x="290" y="946"/>
+    </g>
+    <g fill="#53715e" font-family="monospace" font-size="11" font-weight="700">
+      <text x="128" y="571">UP</text><text x="58" y="638">LEFT</text><text x="178" y="638">RIGHT</text><text x="119" y="770">DOWN</text>
+      <text x="394" y="713">B</text><text x="508" y="677">A</text>
+      <text x="217" y="814">SELECT</text><text x="325" y="814">START</text>
+      <text x="440" y="568">BT+</text><text x="475" y="781">BT−</text>
+      <text x="271" y="891">P5</text><text x="345" y="895">SP1</text>
+    </g>
+  </g>
+  <path d="M358 918c34-45 44-79 81-75 22 3 34 26 42 59" stroke="#a15b36" stroke-width="5" stroke-linecap="round"/>
+  <path d="M366 924c30-33 44-62 67-58 19 3 28 24 37 47" stroke="#4a3932" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="486" cy="878" r="75" fill="url(#magnet)" stroke="#706055" stroke-width="2"/>
+  <circle cx="486" cy="878" r="58" stroke="#a28667" stroke-opacity=".58" stroke-width="3"/>
+</svg>
