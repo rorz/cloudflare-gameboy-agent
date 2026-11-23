@@ -4,13 +4,12 @@ import cloudflareMark from "./assets/cloudflare.svg";
 import mainboard from "./assets/cloudboy-mainboard.svg";
 import regulator from "./assets/cloudboy-regulator.svg";
 import GameBoyControls from "./GameBoyControls";
+import RomPicker from "./RomPicker";
+import type { Cartridge } from "./rom";
 
 // The SDK does not export its runtime assets as package subpaths.
 import mgbaScriptUrl from "../node_modules/@wasm-gaming/mgba-wasm/dist/mgba/mgba.js?url&no-inline";
 import mgbaWasmUrl from "../node_modules/@wasm-gaming/mgba-wasm/dist/mgba/mgba.wasm?url&no-inline";
-
-const romUrl =
-  "";
 
 const gameBoyWidth = 160;
 const gameBoyHeight = 144;
@@ -40,32 +39,34 @@ const speakerHoles = [
 
 export default function App() {
   const screen = useRef<HTMLCanvasElement>(null);
-  const [status, setStatus] = useState<"loading" | "playing" | "error">("loading");
+  const picker = useRef<HTMLDialogElement>(null);
+  const activeGame = useRef<MgbaPlay | null>(null);
+  const stopped = useRef(Promise.resolve());
+  const [cartridge, setCartridge] = useState<Cartridge | null>(null);
+  const [status, setStatus] = useState<"idle" | "loading" | "playing" | "error">("idle");
 
   useEffect(() => {
     const canvas = screen.current;
-    if (!canvas) return;
+    if (!canvas || !cartridge) return;
 
     const controller = new AbortController();
     const { signal } = controller;
     let game: MgbaPlay | undefined;
     let unsubscribeFrame: (() => void) | undefined;
 
-    async function start(display: HTMLCanvasElement) {
+    async function start(display: HTMLCanvasElement, selected: Cartridge) {
+      if (signal.aborted) return;
       try {
         const context = display.getContext("2d");
         if (!context) throw new Error("Could not create the game display");
-
-        const response = await fetch(romUrl, { signal });
-        if (!response.ok) throw new Error(`ROM download failed (HTTP ${response.status})`);
-        const rom = await response.arrayBuffer();
-        if (signal.aborted) return;
+        context.clearRect(0, 0, gameBoyWidth, gameBoyHeight);
 
         const framebuffer = document.createElement("canvas");
         game = new MgbaPlay({
           config: { jsUrl: mgbaScriptUrl, wasmUrl: mgbaWasmUrl },
-          assets: { rom },
-          storage: { namespace: "pokemon-red" },
+          options: { system: "gb" },
+          assets: { rom: selected.bytes },
+          storage: { namespace: selected.saveNamespace },
           mount: framebuffer,
         });
         unsubscribeFrame = game.onFrames(() => {
@@ -79,7 +80,10 @@ export default function App() {
           );
         });
         await game.restart();
-        if (!signal.aborted) setStatus("playing");
+        if (signal.aborted) return;
+        activeGame.current = game;
+        if (picker.current?.open) game.pause("rom-picker");
+        setStatus("playing");
       } catch (error) {
         if (signal.aborted) return;
         console.error("Could not start mGBA", error);
@@ -92,27 +96,50 @@ export default function App() {
       game?.setControls({});
     }
 
-    const startup = start(canvas);
+    // Finish the previous cartridge's save flush before opening the next one.
+    const startup = stopped.current.then(() => start(canvas, cartridge));
     window.addEventListener("blur", releaseKeys);
     return () => {
       controller.abort();
       unsubscribeFrame?.();
       window.removeEventListener("blur", releaseKeys);
-      void startup.then(() => game?.destroy()).catch((error) => {
+      if (activeGame.current === game) activeGame.current = null;
+      stopped.current = startup.then(async () => {
+        await game?.destroy();
+      }).catch((error) => {
         console.error("Could not stop mGBA", error);
       });
     };
-  }, []);
+  }, [cartridge]);
+
+  function openPicker() {
+    picker.current?.showModal();
+    activeGame.current?.pause("rom-picker");
+  }
+
+  function chooseCartridge(selected: Cartridge) {
+    setStatus("loading");
+    setCartridge(selected);
+  }
 
   return (
     <main className="game-page overflow-clip px-2 text-stone-100 sm:px-6">
       <div className="game-layout relative mx-auto grid h-dvh w-full max-w-[1320px] grid-rows-[auto_minmax(0,1fr)]">
         <header className="game-header z-20 grid items-center px-1">
-          <div className="flex items-center gap-2.5 text-[13px] font-semibold tracking-[-0.02em] text-stone-200">
+          <h1 className="flex items-center gap-2.5 text-[13px] font-semibold tracking-[-0.02em] text-stone-200">
             <img src={cloudflareMark} alt="" className="h-auto w-7" />
             Cloudboy Color
-          </div>
-          <h1 className="game-title justify-self-end text-[13px] font-medium text-stone-300">Pokémon Red</h1>
+          </h1>
+          <button
+            type="button"
+            className="game-title cursor-pointer justify-self-end whitespace-nowrap rounded-md border border-orange-400/35 bg-orange-400/10 px-2.5 py-1 text-xs font-semibold text-orange-100 hover:bg-orange-400/20"
+            onClick={openPicker}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.stopPropagation();
+            }}
+          >
+            Choose ROM
+          </button>
           <dl
             id="keymap"
             aria-label="Keyboard controls"
@@ -166,23 +193,13 @@ export default function App() {
                     ref={screen}
                     width={gameBoyWidth}
                     height={gameBoyHeight}
-                    aria-label="Pokémon Red game screen"
+                    aria-label="Game Boy screen"
                     aria-describedby="keymap"
                     className="block h-auto w-full [image-rendering:pixelated]"
                   />
-                  {status === "loading" && <p role="status" className="game-message absolute">Loading ROM…</p>}
-                  {status === "error" && (
-                    <div className="game-message absolute px-2 text-center">
-                      <p role="alert">Couldn’t start Pokémon Red.</p>
-                      <button
-                        type="button"
-                        className="mt-2 cursor-pointer rounded border border-stone-600 px-2.5 py-1 hover:bg-stone-800"
-                        onClick={() => window.location.reload()}
-                      >
-                        Retry
-                      </button>
-                    </div>
-                  )}
+                  {status === "idle" && <p className="game-message absolute px-2 text-center">Choose a ROM to play.</p>}
+                  {status === "loading" && <p role="status" className="game-message absolute">Starting ROM…</p>}
+                  {status === "error" && <p role="alert" className="game-message absolute px-2 text-center">Couldn’t start this ROM.</p>}
                 </div>
                 <div aria-hidden="true" className="game-model absolute flex items-baseline justify-center font-black italic leading-none">
                   <span>CLOUDBOY</span>
@@ -204,6 +221,11 @@ export default function App() {
           </div>
         </div>
       </div>
+      <RomPicker
+        dialog={picker}
+        onChoose={chooseCartridge}
+        onClose={() => activeGame.current?.resume("rom-picker")}
+      />
     </main>
   );
 }
