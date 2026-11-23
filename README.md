@@ -1,4 +1,8 @@
-# Cloudboy Color
+# "Cloudboy Color"
+
+The Cloudflare Gameboy Agent!
+
+https://github.com/user-attachments/assets/ad65df1b-3e96-4a65-a94b-ff95f32aa65f
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/rorz/cloudflare-gameboy-agent)
 
