@@ -4,10 +4,15 @@ export type GameBoyButton = (typeof gameBoyButtons)[number];
 export const lcdWidth = 160;
 export const lcdHeight = 144;
 export const observationScale = 2;
+export const frameDataPrefix = "data:image/png;base64,";
 export const maxHoldFrames = 90;
 export const maxWaitFrames = 120;
-export const historySize = 6;
+export const moveHistorySize = 10;
+export const attemptHistorySize = 6;
 export const inferenceTimeoutMs = 30_000;
+export const slowDecisionMs = 5_000;
+export const gameplayModel = "anthropic/claude-sonnet-5.5";
+export const gameplayModelName = "Sonnet 5.5";
 
 export type Move = {
   buttons: GameBoyButton[];
@@ -21,12 +26,19 @@ export type Decision = {
 
 const turnResults = ["changed", "unchanged", "revisited", "stale", "blocked"] as const;
 export type TurnResult = (typeof turnResults)[number];
-export type Turn = { move: Move; result: TurnResult; intent?: string };
+export type Turn = {
+  move: Move;
+  result: TurnResult;
+  intent?: string;
+  screens?: { from: number; to: number };
+};
+export type HistoryEntry = Turn | `WAITED ${number} TIMES`;
 
 export type Observation = {
   image: string;
   title: string;
-  history: Turn[];
+  screen?: number;
+  history: HistoryEntry[];
   blocked: GameBoyButton[][];
 };
 
@@ -41,10 +53,23 @@ export type ObserveMessage = {
   observation: Observation;
 };
 
+export type DecisionStartedMessage = { type: "decision-started"; id: string };
+
+export type DecisionTiming = {
+  workerMs: number;
+  aiMs?: number;
+  stage?: "observation" | "binding-deadline" | "workers-ai" | "model-output" | "previous-inference";
+  code?: number;
+  pendingRequestId?: string;
+  pendingMs?: number;
+  outputTokens?: number;
+};
+
 export type DecisionMessage = {
   type: "decision";
   id: string;
   reply: DecisionReply;
+  timing?: DecisionTiming;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -91,23 +116,34 @@ export function isDecision(value: unknown): value is Decision {
   );
 }
 
+function isScreenId(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+
 function isTurn(value: unknown): value is Turn {
   if (!isRecord(value) || !isMove(value.move) || !turnResults.some((result) => result === value.result)) {
     return false;
   }
-  return "intent" in value
-    ? Object.keys(value).length === 3 && isIntent(value.intent)
-    : Object.keys(value).length === 2;
+  const hasIntent = "intent" in value;
+  const hasScreens = "screens" in value;
+  const screens = value.screens;
+  return Object.keys(value).length === 2 + Number(hasIntent) + Number(hasScreens) &&
+    (!hasIntent || isIntent(value.intent)) &&
+    (!hasScreens || (isRecord(screens) && Object.keys(screens).length === 2 &&
+      isScreenId(screens.from) && isScreenId(screens.to)));
+}
+
+function isHistoryEntry(value: unknown): value is HistoryEntry {
+  return typeof value === "string" ? /^WAITED [1-9]\d{0,15} TIMES$/.test(value) : isTurn(value);
 }
 
 function isFrame(value: unknown): value is string {
-  const prefix = "data:image/png;base64,";
-  if (typeof value !== "string" || value.length > 192_000 || !value.startsWith(prefix)) {
+  if (typeof value !== "string" || value.length > 192_000 || !value.startsWith(frameDataPrefix)) {
     return false;
   }
 
   try {
-    const png = atob(value.slice(prefix.length));
+    const png = atob(value.slice(frameDataPrefix.length));
     const size = (offset: number) =>
       png.charCodeAt(offset) * 0x1000000 + png.charCodeAt(offset + 1) * 0x10000 +
       png.charCodeAt(offset + 2) * 0x100 + png.charCodeAt(offset + 3);
@@ -124,14 +160,16 @@ function isFrame(value: unknown): value is string {
 export function isObservation(value: unknown): value is Observation {
   return (
     isRecord(value) &&
-    Object.keys(value).length === 4 &&
+    Object.keys(value).length === ("screen" in value ? 5 : 4) &&
     typeof value.title === "string" &&
     /^[ -~]{1,16}$/.test(value.title) &&
+    (!("screen" in value) || isScreenId(value.screen)) &&
     Array.isArray(value.history) &&
-    value.history.length <= historySize &&
-    value.history.every(isTurn) &&
+    value.history.length <= moveHistorySize * 2 + 1 &&
+    value.history.every(isHistoryEntry) &&
+    value.history.filter((entry) => typeof entry !== "string").length <= moveHistorySize &&
     Array.isArray(value.blocked) &&
-    value.blocked.length <= historySize &&
+    value.blocked.length <= attemptHistorySize &&
     value.blocked.every(isButtons) &&
     isFrame(value.image)
   );

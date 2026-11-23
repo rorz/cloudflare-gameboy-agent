@@ -1,16 +1,18 @@
 import type { MgbaPlay } from "@wasm-gaming/mgba-wasm";
-import { AgentClient } from "agents/client";
+import { AgentClient, type AgentConnectionError } from "agents/client";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import {
-  historySize, inferenceTimeoutMs, isDecision, maxHoldFrames, maxWaitFrames, type DecisionMessage, type DecisionReply,
-  type GameBoyButton, type Move, type Observation, type ObserveMessage, type Turn,
+  attemptHistorySize, gameplayModel, gameplayModelName, inferenceTimeoutMs, isDecision, maxHoldFrames, maxWaitFrames,
+  moveHistorySize, slowDecisionMs,
+  type DecisionMessage, type DecisionReply, type DecisionStartedMessage, type DecisionTiming,
+  type GameBoyButton, type HistoryEntry, type Move, type Observation, type ObserveMessage, type Turn,
 } from "../shared/gameplay";
 import { frameReader, pollScreen, sameSituation, staleFrame, waitForFrames, type GameFrame } from "./agentEmulator";
 import type { GameBoyControlsHandle } from "./GameBoyControls";
 
 type LogEntry =
   | { kind: "link" | "error" | "feedback"; text: string }
-  | { kind: "intent"; text: string; elapsedMs: number }
+  | { kind: "intent"; text: string; elapsedMs: number; modelName?: string }
   | { kind: "move"; move: Move; result: Turn["result"] };
 
 export type AgentLogEntry = LogEntry & { id: number; time: number };
@@ -26,6 +28,7 @@ type Emulator = {
 };
 
 const logLimit = 64;
+const diagnosticLimit = 16;
 const stallLimit = 3;
 const retryLimit = 3;
 const pendingTimeoutMs = 10_000;
@@ -35,14 +38,37 @@ function sameButtons(a: GameBoyButton[], b: GameBoyButton[]) {
   return a.length === b.length && a.every((button) => b.includes(button));
 }
 
+type DecisionTrace = {
+  requestId: string;
+  browserMs: number;
+  acceptedMs?: number;
+  worker?: DecisionTiming;
+  transport?: "reply-timeout" | "send-failed";
+};
+
+type Diagnostic = Partial<DecisionTrace> & {
+  event: string;
+  attempt?: number;
+  code?: number;
+  phase?: AgentActivity;
+};
+
 function requestDecision(agent: AgentClient, observation: Observation, signal: AbortSignal) {
   signal.throwIfAborted();
   const packet: ObserveMessage = { type: "observe", id: crypto.randomUUID(), observation };
-  return new Promise<DecisionReply>((resolve, reject) => {
+  const startedAt = performance.now();
+  let acceptedMs: number | undefined;
+  return new Promise<{ reply: DecisionReply; trace: DecisionTrace }>((resolve, reject) => {
     const timeout = window.setTimeout(() => {
-      cleanup();
-      resolve({ retryAfterMs: 1_000, reason: "timeout" });
+      finish({ retryAfterMs: 1_000, reason: "timeout" }, undefined, "reply-timeout");
     }, inferenceTimeoutMs + 2_000);
+
+    function finish(reply: DecisionReply, worker?: DecisionTiming, transport?: DecisionTrace["transport"]) {
+      cleanup();
+      resolve({ reply, trace: {
+        requestId: packet.id, browserMs: Math.round(performance.now() - startedAt), acceptedMs, worker, transport,
+      } });
+    }
 
     function cleanup() {
       window.clearTimeout(timeout);
@@ -57,24 +83,23 @@ function requestDecision(agent: AgentClient, observation: Observation, signal: A
 
     function receive(event: MessageEvent) {
       if (typeof event.data !== "string") return;
-      let response: Partial<DecisionMessage> | null;
+      let response: Partial<DecisionMessage | DecisionStartedMessage> | null;
       try {
         response = JSON.parse(event.data);
       } catch {
         return;
       }
-      if (response?.type !== "decision" || response.id !== packet.id || !response.reply) return;
-      cleanup();
-      resolve(response.reply);
+      if (response?.id !== packet.id) return;
+      if (response.type === "decision-started") acceptedMs ??= Math.round(performance.now() - startedAt);
+      if (response.type === "decision" && response.reply) finish(response.reply, response.timing);
     }
 
     signal.addEventListener("abort", abort, { once: true });
     agent.addEventListener("message", receive);
     try {
       agent.send(JSON.stringify(packet));
-    } catch (error) {
-      cleanup();
-      reject(error);
+    } catch {
+      finish({ error: "inference-failed" }, undefined, "send-failed");
     }
   });
 }
@@ -106,6 +131,13 @@ export function useGameplayAgent({ game, title, screen, controls, blocked }: Emu
   const [activity, setActivity] = useState<AgentActivity>("observing");
   const [inputPulse, setInputPulse] = useState(0);
   const [log, setLog] = useState<AgentLogEntry[]>([]);
+  const [diagnostics, setDiagnostics] = useState<string[]>([]);
+
+  const report = useCallback((diagnostic: Diagnostic) => {
+    const event = { time: new Date().toISOString(), model: gameplayModel, ...diagnostic };
+    console.warn("gameplay_diagnostic", event);
+    setDiagnostics((current) => [...current.slice(1 - diagnosticLimit), JSON.stringify(event)]);
+  }, []);
 
   const append = useCallback((event: LogEntry) => {
     const entry = { ...event, time: Date.now(), id: ++nextLogId.current };
@@ -132,8 +164,14 @@ export function useGameplayAgent({ game, title, screen, controls, blocked }: Emu
     sessionId.current ??= crypto.randomUUID();
     setConnecting(true);
     setFailure(false);
-    const connectionFailed = () => {
+    const startedAt = performance.now();
+    const connectionFailed = (error?: AgentConnectionError) => {
       if (link.current?.client === socket) {
+        report({
+          event: error ? "socket-closed" : "connect-timeout",
+          browserMs: Math.round(performance.now() - startedAt),
+          code: error?.code,
+        });
         closeLink({
           kind: "error",
           text: link.current.connected ? "Agent connection lost." : "Couldn’t reach the local agent.",
@@ -156,7 +194,7 @@ export function useGameplayAgent({ game, title, screen, controls, blocked }: Emu
       },
       onConnectionError: connectionFailed,
     });
-    link.current = { client: socket, timeout: window.setTimeout(connectionFailed, 8_000), connected: false };
+    link.current = { client: socket, timeout: window.setTimeout(() => connectionFailed(), 8_000), connected: false };
   }
 
   const disconnect = () => closeLink({ kind: "link", text: "Disconnected from the agent." });
@@ -197,43 +235,78 @@ export function useGameplayAgent({ game, title, screen, controls, blocked }: Emu
     signal.addEventListener("abort", release, { once: true });
 
     async function play() {
+      let phase: AgentActivity = "observing";
+      let lastTrace: DecisionTrace | undefined;
+      function showActivity(next: AgentActivity) {
+        phase = next;
+        setActivity(next);
+      }
+
       try {
         const reader = frameReader(display);
-        const history: Turn[] = [];
-        const attempts: { before: GameFrame; move: Move }[] = [];
+        const history: HistoryEntry[] = [];
+        const screens: { id: number; frame: GameFrame }[] = [];
+        const attempts: { from: number; to: number; buttons: GameBoyButton[]; progressed: boolean }[] = [];
+        let nextScreen = 0;
+        let waits = 0;
         let stalled = 0;
         let invalidDecisions = 0;
         let retries = 0;
         let pendingSince: number | undefined;
 
-        function remember(turn: Turn) {
-          history.push(turn);
-          if (history.length > historySize) history.shift();
-          if (turn.result === "changed" || turn.result === "stale") stalled = 0;
-          else if (turn.move.buttons.length && ++stalled >= stallLimit) {
+        function identifyScreen(frame: GameFrame) {
+          const previous = screens.findLast((screen) => sameSituation(screen.frame, frame));
+          if (previous) return { id: previous.id, isNew: false };
+          const id = ++nextScreen;
+          screens.push({ id, frame });
+          if (screens.length > moveHistorySize * 2 + 2) screens.shift();
+          return { id, isNew: true };
+        }
+
+        function failedButtons(screenId: number) {
+          return attempts.filter(({ from, progressed }) => from === screenId && !progressed)
+            .map(({ buttons }) => buttons);
+        }
+
+        function remember(turn: Turn, progressed: boolean) {
+          const hasInput = turn.move.buttons.length > 0;
+          if (!hasInput) waits++;
+          else if (turn.result !== "stale" && turn.result !== "blocked") {
+            if (waits) history.push(`WAITED ${waits} TIMES`);
+            history.push(turn);
+            waits = 0;
+            if (history.filter((entry) => typeof entry !== "string").length > moveHistorySize) {
+              history.splice(0, typeof history[0] === "string" ? 2 : 1);
+            }
+          }
+          if (progressed) stalled = 0;
+          else if (hasInput && ++stalled >= stallLimit) {
             throw new Error("Agent stopped after three button decisions without progress.");
           }
         }
 
-        setActivity("observing");
+        showActivity("observing");
         await waitForFrames(emulator, 1, signal);
 
         while (!signal.aborted) {
-          setActivity("observing");
+          showActivity("observing");
           const observed = reader.sample();
+          const observedScreen = identifyScreen(observed).id;
           const observation: Observation = {
             image: reader.image(),
             title,
-            history,
-            blocked: attempts.filter(({ before }) => sameSituation(before, observed)).map(({ move }) => move.buttons),
+            screen: observedScreen,
+            history: waits ? [...history, `WAITED ${waits} TIMES`] : history,
+            blocked: failedButtons(observedScreen),
           };
-          const startedAt = performance.now();
-          const reply = await requestDecision(agent, observation, signal);
+          const { reply, trace } = await requestDecision(agent, observation, signal);
           signal.throwIfAborted();
+          lastTrace = trace;
 
           if ("retryAfterMs" in reply) {
             if (reply.reason === "pending") {
-              setActivity("retrying");
+              showActivity("retrying");
+              if (pendingSince === undefined) report({ event: "waiting-for-previous-inference", ...trace });
               pendingSince ??= performance.now();
               if (performance.now() - pendingSince >= pendingTimeoutMs) {
                 throw new Error("The previous model request is still running. Agent stopped to avoid overlapping calls.");
@@ -243,9 +316,11 @@ export function useGameplayAgent({ game, title, screen, controls, blocked }: Emu
             }
             pendingSince = undefined;
             if (reply.reason) {
-              setActivity("retrying");
-              const reason = reply.reason === "timeout" ? "Decision exceeded the time limit." : "Workers AI is busy.";
-              if (++retries >= retryLimit) throw new Error(`${reason} Agent stopped after ${retryLimit} attempts.`);
+              showActivity("retrying");
+              const reason = trace.transport === "reply-timeout" ? "No reply from the agent."
+                : reply.reason === "timeout" ? "Workers AI decision timed out." : "Workers AI is busy.";
+              report({ event: reply.reason, attempt: ++retries, ...trace });
+              if (retries >= retryLimit) throw new Error(`${reason} Agent stopped after ${retryLimit} attempts.`);
               append({ kind: "feedback", text: `${reason} Retrying with a fresh frame.` });
             }
             await wait(reply.retryAfterMs * 2 ** Math.max(0, retries - 1), signal);
@@ -254,62 +329,68 @@ export function useGameplayAgent({ game, title, screen, controls, blocked }: Emu
           pendingSince = undefined;
           retries = 0;
           if ("error" in reply || !isDecision(reply.decision)) {
+            report({ event: "error" in reply ? reply.error : "invalid-decision", ...trace });
+            if (trace.transport === "send-failed") throw new Error("Couldn’t send a frame to the agent.");
             if ("error" in reply && reply.error === "inference-failed") {
-              throw new Error("Workers AI couldn’t read the frame.");
+              throw new Error("Workers AI couldn’t complete the decision.");
             }
             if (++invalidDecisions < 2) continue;
             throw new Error("The agent couldn’t produce valid controls.");
           }
           invalidDecisions = 0;
+          if (trace.browserMs >= slowDecisionMs) report({ event: "slow-decision", ...trace });
 
           const { move, intent } = reply.decision;
-          const elapsedMs = performance.now() - startedAt;
           const hasInput = move.buttons.length > 0;
           const before = hasInput ? reader.sample() : observed;
           if (hasInput && staleFrame(observed, before)) {
             append({ kind: "feedback", text: "Skipped an input because the game state changed." });
-            remember({ intent, move, result: "stale" });
+            remember({ intent, move, result: "stale" }, true);
             continue;
           }
-          if (hasInput && attempts.some(({ before: frame, move: tried }) =>
-            sameButtons(tried.buttons, move.buttons) && sameSituation(frame, before)
-          )) {
-            append({ kind: "feedback", text: "Skipped an input that already led here." });
-            remember({ intent, move, result: "blocked" });
+          const from = hasInput ? identifyScreen(before).id : observedScreen;
+          if (hasInput && failedButtons(from).some((tried) => sameButtons(tried, move.buttons))) {
+            append({ kind: "feedback", text: "Skipped an input that already failed to make progress here." });
+            remember({ intent, move, result: "blocked" }, false);
             continue;
           }
           signal.throwIfAborted();
-          append({ kind: "intent", text: intent, elapsedMs });
+          append({ kind: "intent", text: intent, elapsedMs: trace.browserMs, modelName: trace.worker && gameplayModelName });
           let heldFrames = 0;
           if (hasInput) {
-            setActivity("moving");
+            showActivity("moving");
             buttons.setAgentButtons(move.buttons);
             setInputPulse((count) => count + 1);
             heldFrames = await waitForFrames(emulator, move.frames, signal);
             signal.throwIfAborted();
             release();
           }
-          setActivity("watching");
+          showActivity("watching");
           const { frame: after, frames: polledFrames } = await pollScreen(
             emulator, reader.sample, before, hasInput ? inputSettleFrames : move.frames, signal,
           );
           signal.throwIfAborted();
           const frames = hasInput ? heldFrames : polledFrames;
-          const result = sameSituation(before, after) ? "unchanged"
-            : attempts.some(({ before: frame }) => sameSituation(frame, after)) ? "revisited" : "changed";
+          const { id: to, isNew } = identifyScreen(after);
+          const result = from === to ? "unchanged" : isNew ? "changed" : "revisited";
+          const progressed = hasInput
+            ? from !== to && !attempts.some((attempt) => attempt.from === from && attempt.to === to)
+            : result === "changed";
           if (hasInput) {
-            attempts.push({ before, move });
-            if (attempts.length > historySize) attempts.shift();
+            attempts.push({ from, to, buttons: move.buttons, progressed });
+            if (attempts.length > attemptHistorySize) attempts.shift();
           }
           append({ kind: "move", move: { buttons: move.buttons, frames }, result });
           remember({
             intent,
             move: { buttons: move.buttons, frames: Math.min(frames, hasInput ? maxHoldFrames : maxWaitFrames) },
             result,
-          });
+            screens: { from, to },
+          }, progressed);
         }
       } catch (error) {
         if (!signal.aborted) {
+          report({ event: "gameplay-stopped", phase, ...lastTrace });
           closeLink({
             kind: "error",
             text: error instanceof Error ? error.message : "The agent stopped unexpectedly.",
@@ -324,7 +405,7 @@ export function useGameplayAgent({ game, title, screen, controls, blocked }: Emu
 
     void play();
     return () => controller.abort();
-  }, [append, blocked, client, closeLink, controls, game, screen, title, visible]);
+  }, [append, blocked, client, closeLink, controls, game, report, screen, title, visible]);
 
   let status: AgentStatus = failure ? "error" : "offline";
   if (connecting) status = "connecting";
@@ -333,5 +414,5 @@ export function useGameplayAgent({ game, title, screen, controls, blocked }: Emu
     else status = game ? activity : "waiting";
   }
 
-  return { status, connected: client !== null, inputPulse, log, connect, disconnect, takeOver, stopRound };
+  return { status, connected: client !== null, inputPulse, log, diagnostics: diagnostics.join("\n"), connect, disconnect, takeOver, stopRound };
 }

@@ -324,6 +324,7 @@ export default function App() {
           canConnect={status === "playing" && !pickerOpen}
           status={agent.status}
           log={agent.log}
+          diagnostics={agent.diagnostics}
           onConnect={agent.connect}
           onDisconnect={agent.disconnect}
         />

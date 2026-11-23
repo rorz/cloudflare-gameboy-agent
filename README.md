@@ -1,42 +1,29 @@
 # Cloudboy Color
 
-Run `bun install` and `bun run dev`. Load a Game Boy or Game Boy Color ROM, then use **Connect to Agent** to hand over the controls. Disconnect or press a game control to take back over. The model sees the current frame and the last six decisions and outcomes. It can wait and watch the screen between inputs, and stops after three button decisions without progress.
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/rorz/cloudflare-gameboy-agent)
 
-Qwen makes each gameplay decision from the moment you connect, using the current LCD frame, cartridge header title, and recent input outcomes. Run `bunx wrangler login` before starting Vite to enable Workers AI. If Wrangler has multiple accounts, set `CLOUDFLARE_ACCOUNT_ID` in an ignored `.env.local` file. Bring your own ROM. Cartridge files and saves stay in the browser.
+Cloudboy Color is a browser-based Game Boy and Game Boy Color emulator in a translucent orange shell. Play with the keyboard or on-screen controls, or hand the game over to a Cloudflare Agent.
 
-See [production rate limiting](docs/agent-production.md) for the work needed to enable the gameplay route on a public deployment.
+The demo runs mGBA in WebAssembly. On each turn, the agent gives Claude Sonnet 5.5 the current screen, cartridge title and last ten button moves and outcomes via Workers AI. It groups consecutive waits into a single count. The model chooses which buttons to press or when to wait. The side panel shows its decisions and how the game responds.
 
-The app is available under the [MIT License](LICENSE). Third-party components follow their respective licenses.
+## Run locally
 
-## React + TypeScript + Vite
-
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```sh
+bun install
+bunx wrangler login
+bun run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Open the URL Vite prints and load your own ROM from a file or direct download URL. ROMs and saves stay in the browser. Select **Connect to Agent** to let the agent play. Press a game control or select **Disconnect** to take over.
+
+The Worker uses the `default` AI Gateway. To use Cloudflare-managed credentials, add Unified Billing credits to your Cloudflare account. [AI Gateway billing setup](https://developers.cloudflare.com/ai-gateway/features/unified-billing/)
+
+Set `AI_GATEWAY_ID` in `.dev.vars` to use another gateway. If Wrangler has multiple accounts, set `CLOUDFLARE_ACCOUNT_ID` in `.env.local`.
+
+Use **Copy diagnostics** in the agent pane after a slow or failed turn. The copied request IDs and timings match the Worker's terminal logs.
+
+The agent route is enabled for local development only. [Public deployment notes](docs/agent-production.md)
+
+## Licence
+
+The project code is licensed under MIT. Third-party components retain their own licences. [MIT licence text](LICENSE)

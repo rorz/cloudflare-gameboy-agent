@@ -17,6 +17,7 @@
 		{ "tag": "v1", "new_sqlite_classes": ["GameplayAgent"] }
 	],
 	"ai": { "binding": "AI", "remote": true },
+	"vars": { "AI_GATEWAY_ID": "default" },
 	"assets": {
 		"not_found_handling": "single-page-application",
 		"run_worker_first": ["/agents/*"]

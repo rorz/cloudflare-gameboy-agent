@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { GameBoyButton } from "../shared/gameplay";
 import type { AgentLogEntry, AgentStatus } from "./useGameplayAgent";
 
@@ -34,6 +34,7 @@ type AgentPaneProps = {
   canConnect: boolean;
   status: AgentStatus;
   log: AgentLogEntry[];
+  diagnostics: string;
   onConnect: () => void;
   onDisconnect: () => void;
 };
@@ -59,8 +60,8 @@ function LogRow({ entry, input }: { entry: AgentLogEntry; input?: InputEntry }) 
   return (
     <li className="agent-log-row min-w-0 px-2.5 py-2.5" data-kind={entry.kind}>
       <div className="agent-log-meta mb-1 flex items-center justify-between gap-2 font-mono text-[10px] tabular-nums">
-        <span>
-          {intent ? `Qwen · ${(entry.elapsedMs / 1_000).toFixed(1)}s` : null}
+        <span title={intent ? "Decision round trip" : undefined}>
+          {intent ? `${entry.modelName ?? "Decision"} · ${(entry.elapsedMs / 1_000).toFixed(1)}s` : null}
         </span>
         <time dateTime={new Date(entry.time).toISOString()}>{timeFormat.format(entry.time)}</time>
       </div>
@@ -70,10 +71,22 @@ function LogRow({ entry, input }: { entry: AgentLogEntry; input?: InputEntry }) 
   );
 }
 
-export default function AgentPane({ open, canConnect, status, log, onConnect, onDisconnect }: AgentPaneProps) {
+export default function AgentPane({ open, canConnect, status, log, diagnostics, onConnect, onDisconnect }: AgentPaneProps) {
   const list = useRef<HTMLDivElement>(null);
   const followLog = useRef(true);
+  const [copied, setCopied] = useState("");
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const linkOpen = status !== "offline" && status !== "error";
+
+  async function copyDiagnostics() {
+    try {
+      await navigator.clipboard.writeText(diagnostics);
+      setCopied(diagnostics);
+      setShowDiagnostics(false);
+    } catch {
+      setShowDiagnostics(true);
+    }
+  }
 
   useLayoutEffect(() => {
     const viewport = list.current;
@@ -106,6 +119,26 @@ export default function AgentPane({ open, canConnect, status, log, onConnect, on
         </p>
         {!linkOpen && canConnect && (
           <p className="agent-connection-note w-full text-[10px]">Shares game frames with Workers AI</p>
+        )}
+        {diagnostics && (
+          <button
+            type="button"
+            onClick={() => void copyDiagnostics()}
+            className="agent-link-status ml-auto cursor-pointer rounded-sm font-mono text-[10px] underline underline-offset-2 focus-visible:outline-2"
+          >
+            {copied === diagnostics ? "Copied" : "Copy diagnostics"}
+          </button>
+        )}
+        {showDiagnostics && (
+          <textarea
+            aria-label="Agent diagnostics"
+            className="w-full rounded border border-stone-300 bg-white p-1.5 font-mono text-[10px] text-stone-700"
+            readOnly
+            rows={3}
+            value={diagnostics}
+            onFocus={(event) => event.currentTarget.select()}
+            onKeyDown={(event) => event.stopPropagation()}
+          />
         )}
       </div>
       <div
