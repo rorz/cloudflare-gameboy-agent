@@ -1,17 +1,18 @@
 import { MgbaPlay } from "@wasm-gaming/mgba-wasm";
 import { useEffect, useRef, useState } from "react";
+import { lcdHeight as gameBoyHeight, lcdWidth as gameBoyWidth } from "../shared/gameplay";
+import AgentCircuit from "./AgentCircuit";
+import AgentPane from "./AgentPane";
 import mainboard from "./assets/cloudboy-mainboard.svg";
 import regulator from "./assets/cloudboy-regulator.svg";
-import GameBoyControls from "./GameBoyControls";
+import GameBoyControls, { type GameBoyControlsHandle } from "./GameBoyControls";
 import RomPicker from "./RomPicker";
 import type { Cartridge } from "./rom";
+import { useGameplayAgent } from "./useGameplayAgent";
 
 // The SDK does not export its runtime assets as package subpaths.
 import mgbaScriptUrl from "../node_modules/@wasm-gaming/mgba-wasm/dist/mgba/mgba.js?url&no-inline";
 import mgbaWasmUrl from "../node_modules/@wasm-gaming/mgba-wasm/dist/mgba/mgba.wasm?url&no-inline";
-
-const gameBoyWidth = 160;
-const gameBoyHeight = 144;
 
 const keymap = [
   { button: "Move", key: "↑ ↓ ← →", label: "Arrow keys" },
@@ -38,13 +39,24 @@ const speakerHoles = [
 
 export default function App() {
   const screen = useRef<HTMLCanvasElement>(null);
+  const controls = useRef<GameBoyControlsHandle>(null);
   const picker = useRef<HTMLDialogElement>(null);
   const activeGame = useRef<MgbaPlay | null>(null);
   const stopped = useRef(Promise.resolve());
+  const [runningGame, setRunningGame] = useState<MgbaPlay | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [agentOpen, setAgentOpen] = useState(() => window.matchMedia("(min-width: 700px)").matches);
   const [cartridge, setCartridge] = useState<Cartridge | null>(null);
   const [status, setStatus] = useState<
     "idle" | "loading" | "playing" | "error"
   >("idle");
+  const agent = useGameplayAgent({
+    game: status === "playing" ? runningGame : null,
+    title: cartridge?.title ?? "Game Boy",
+    screen,
+    controls,
+    blocked: pickerOpen,
+  });
 
   useEffect(() => {
     const canvas = screen.current;
@@ -58,7 +70,7 @@ export default function App() {
     async function start(display: HTMLCanvasElement, selected: Cartridge) {
       if (signal.aborted) return;
       try {
-        const context = display.getContext("2d");
+        const context = display.getContext("2d", { willReadFrequently: true });
         if (!context) throw new Error("Could not create the game display");
         context.clearRect(0, 0, gameBoyWidth, gameBoyHeight);
 
@@ -90,6 +102,7 @@ export default function App() {
         if (signal.aborted) return;
         activeGame.current = game;
         if (picker.current?.open) game.pause("rom-picker");
+        setRunningGame(game);
         setStatus("playing");
       } catch (error) {
         if (signal.aborted) return;
@@ -122,31 +135,43 @@ export default function App() {
   }, [cartridge]);
 
   function openPicker() {
+    agent.stopRound();
     picker.current?.showModal();
     activeGame.current?.pause("rom-picker");
+    setPickerOpen(true);
   }
 
   function chooseCartridge(selected: Cartridge) {
+    setRunningGame(null);
     setStatus("loading");
     setCartridge(selected);
   }
 
   return (
     <main className="game-page overflow-clip px-2 text-stone-100 sm:px-6">
-      <div className="game-layout relative mx-auto grid h-dvh w-full max-w-[1320px] grid-rows-[auto_minmax(0,1fr)]">
+      <div
+        className="game-layout relative mx-auto grid h-dvh w-full max-w-[1320px]"
+        data-agent-open={agentOpen}
+      >
         <header className="game-header z-20 grid items-center px-1">
-          {(status === "playing" || status === "loading") && (
+          <div className="game-header-actions flex items-center justify-end gap-2" onKeyDown={(event) => {
+            if (event.key === "Enter") event.stopPropagation();
+          }}>
+            {(status === "playing" || status === "loading") && (
+              <button type="button" className="header-button keycap" onClick={openPicker}>Choose ROM</button>
+            )}
             <button
               type="button"
-              className="game-header-action cursor-pointer justify-self-end whitespace-nowrap rounded-md border border-orange-400/35 bg-orange-400/10 px-2.5 py-1 text-xs font-semibold text-orange-100 hover:bg-orange-400/20"
-              onClick={openPicker}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") event.stopPropagation();
-              }}
+              aria-controls="agent-pane"
+              aria-expanded={agentOpen}
+              onClick={() => setAgentOpen((open) => !open)}
+              className="header-button agent-toggle keycap flex items-center gap-2"
             >
-              Choose ROM
+              {agent.connected && <span aria-hidden="true" className="agent-status-light" data-status={agent.status} />}
+              Cloudflare Agent
+              <span aria-hidden="true" className="agent-panel-glyph" />
             </button>
-          )}
+          </div>
           <dl
             id="keymap"
             aria-label="Keyboard controls"
@@ -168,7 +193,8 @@ export default function App() {
           </dl>
         </header>
 
-        <div className="game-stage relative isolate flex items-end justify-center rounded-2xl sm:rounded-3xl">
+        <div className="game-stage relative isolate flex min-w-0 items-end justify-center rounded-2xl sm:rounded-3xl">
+          {agentOpen && <AgentCircuit connected={agent.connected} inputPulse={agent.inputPulse} />}
           <div className="game-device relative z-10 select-none">
             <div
               className="game-body relative isolate"
@@ -271,7 +297,7 @@ export default function App() {
                 aria-hidden="true"
                 className="shell-stamp pointer-events-none absolute grid place-items-center"
               />
-              <GameBoyControls disabled={status !== "playing"} />
+              <GameBoyControls disabled={status !== "playing"} onManualInput={agent.takeOver} ref={controls} />
               <div
                 aria-hidden="true"
                 className="shell-speaker pointer-events-none absolute"
@@ -293,11 +319,22 @@ export default function App() {
             </div>
           </div>
         </div>
+        <AgentPane
+          open={agentOpen}
+          canConnect={status === "playing" && !pickerOpen}
+          status={agent.status}
+          log={agent.log}
+          onConnect={agent.connect}
+          onDisconnect={agent.disconnect}
+        />
       </div>
       <RomPicker
         dialog={picker}
         onChoose={chooseCartridge}
-        onClose={() => activeGame.current?.resume("rom-picker")}
+        onClose={() => {
+          activeGame.current?.resume("rom-picker");
+          setPickerOpen(false);
+        }}
       />
     </main>
   );

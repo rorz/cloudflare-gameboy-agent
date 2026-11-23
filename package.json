@@ -2,6 +2,7 @@
   "name": "cloudflare-gameboy-agent",
   "private": false,
   "version": "0.0.0",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,6 +16,7 @@
     "@tailwindcss/vite": "^4.3.5",
     "@wasm-gaming/engine-specs": "0.6.3",
     "@wasm-gaming/mgba-wasm": "0.3.1",
+    "agents": "^0.34.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "tailwindcss": "^4.3.5"

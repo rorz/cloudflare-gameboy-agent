@@ -1,9 +1,9 @@
 const maximumRomBytes = 8 * 1024 * 1024;
-const legacyRedDigest = "5ca7ba01642a3b27b0cc0b5349b52792795b62d3ed977e98a09390659af96b7b";
 
 export type Cartridge = {
   bytes: ArrayBuffer;
   saveNamespace: string;
+  title: string;
 };
 
 function checkSize(length: number) {
@@ -19,10 +19,12 @@ async function prepareCartridge(bytes: ArrayBuffer): Promise<Cartridge> {
 
   const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
   const digest = Array.from(hash, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const titleBytes = header.subarray(0x134, header[0x143] & 0x80 ? 0x143 : 0x144);
+  const title = String.fromCharCode(...titleBytes).split("\0")[0].replace(/[^ -~]/g, " ").trim();
   return {
     bytes,
-    // The original cartridge keeps its existing browser save slot.
-    saveNamespace: digest === legacyRedDigest ? "pokemon-red" : `gb-${digest}`,
+    title: title || "Game Boy",
+    saveNamespace: `gb-${digest}`,
   };
 }
 

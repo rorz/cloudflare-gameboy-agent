@@ -1,12 +1,11 @@
 import { exposeAsGamepad, type VirtualGamepad } from "@wasm-gaming/engine-specs";
 import { DEFAULT_KEYMAP, DEFAULT_PADMAP } from "@wasm-gaming/mgba-wasm";
-import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent } from "react";
+import { useCallback, useEffect, useEffectEvent, useImperativeHandle, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent, type Ref } from "react";
+import { gameBoyButtons, type GameBoyButton as Control } from "../shared/gameplay";
 
 const directions = ["up", "left", "right", "down"] as const;
 const faceButtons = ["b", "a"] as const;
 const systemButtons = ["select", "start"] as const;
-const controls = [...directions, ...faceButtons, ...systemButtons];
-type Control = (typeof controls)[number];
 
 const controlLabels: Record<Control, string> = {
   up: "Up",
@@ -19,7 +18,7 @@ const controlLabels: Record<Control, string> = {
   start: "Start",
 };
 
-const controlForKey = new Map(controls.map((control) => [DEFAULT_KEYMAP[`p1.${control}`], control]));
+const controlForKey = new Map(gameBoyButtons.map((control) => [DEFAULT_KEYMAP[`p1.${control}`], control]));
 const minimumPressMs = 50;
 
 const rockerCorner = [
@@ -63,11 +62,49 @@ type HeldControl = {
   releaseTimer?: number;
 };
 
-export default function GameBoyControls({ disabled }: { disabled: boolean }) {
+export type GameBoyControlsHandle = {
+  setAgentButtons(buttons: readonly Control[]): void;
+};
+
+type GameBoyControlsProps = {
+  disabled: boolean;
+  onManualInput: () => void;
+  ref: Ref<GameBoyControlsHandle>;
+};
+
+export default function GameBoyControls({ disabled, onManualInput, ref }: GameBoyControlsProps) {
   const gamepad = useRef<VirtualGamepad | null>(null);
   const [keys, setKeys] = useState<Partial<Record<Control, boolean>>>({});
-  const [pad, setPad] = useState<Partial<Record<Control, boolean>>>({});
+  const [pad, setPad] = useState<ReadonlySet<Control>>(() => new Set());
   const held = useRef(new Map<Control, HeldControl>());
+  const agentButtons = useRef<readonly Control[]>([]);
+
+  const syncPad = useCallback(() => {
+    const virtualPad = gamepad.current;
+    if (!virtualPad) return;
+    const active = new Set([...held.current.keys(), ...agentButtons.current]);
+    for (const control of gameBoyButtons) {
+      const pressed = active.has(control);
+      const button = virtualPad.buttons[DEFAULT_PADMAP[control]];
+      button.pressed = pressed;
+      button.touched = pressed;
+      button.value = pressed ? 1 : 0;
+    }
+    virtualPad.timestamp = performance.now();
+    setPad(active);
+  }, []);
+
+  useImperativeHandle(ref, () => ({
+    setAgentButtons(buttons) {
+      if (!buttons.length && !agentButtons.current.length) return;
+      agentButtons.current = buttons;
+      syncPad();
+    },
+  }), [syncPad]);
+
+  const onManualKey = useEffectEvent(() => {
+    if (!disabled) onManualInput();
+  });
 
   useEffect(() => {
     const virtualPad: VirtualGamepad = {
@@ -84,26 +121,21 @@ export default function GameBoyControls({ disabled }: { disabled: boolean }) {
     const active = held.current;
     const disconnect = exposeAsGamepad(virtualPad);
 
-    function clearPad() {
+    function clearPointerInput() {
       for (const press of active.values()) window.clearTimeout(press.releaseTimer);
       active.clear();
-      for (const button of virtualPad.buttons) {
-        button.pressed = false;
-        button.touched = false;
-        button.value = 0;
-      }
-      virtualPad.timestamp = performance.now();
     }
 
     function releaseAll() {
-      clearPad();
+      clearPointerInput();
+      syncPad();
       setKeys({});
-      setPad({});
     }
 
     function onKey(event: KeyboardEvent) {
       const control = controlForKey.get(event.code);
       if (!control || event.repeat) return;
+      if (event.type === "keydown") onManualKey();
       setKeys((current) => ({ ...current, [control]: event.type === "keydown" }));
     }
 
@@ -120,31 +152,21 @@ export default function GameBoyControls({ disabled }: { disabled: boolean }) {
       window.removeEventListener("keyup", onKey);
       window.removeEventListener("blur", releaseAll);
       document.removeEventListener("visibilitychange", onVisibilityChange);
-      clearPad();
+      clearPointerInput();
+      agentButtons.current = [];
       disconnect();
       gamepad.current = null;
     };
-  }, []);
-
-  function setButton(control: Control, pressed: boolean) {
-    const virtualPad = gamepad.current;
-    if (!virtualPad) return;
-    const button = virtualPad.buttons[DEFAULT_PADMAP[control]];
-    if (button.pressed === pressed) return;
-    button.pressed = pressed;
-    button.touched = pressed;
-    button.value = pressed ? 1 : 0;
-    virtualPad.timestamp = performance.now();
-    setPad((current) => ({ ...current, [control]: pressed }));
-  }
+  }, [syncPad]);
 
   function press(control: Control, pointer?: number) {
+    onManualInput();
     const entry: HeldControl = held.current.get(control) ?? { pointers: new Set<number>(), startedAt: 0 };
     window.clearTimeout(entry.releaseTimer);
     entry.startedAt = performance.now();
     if (pointer !== undefined) entry.pointers.add(pointer);
     held.current.set(control, entry);
-    setButton(control, true);
+    syncPad();
   }
 
   function release(control: Control, pointer?: number) {
@@ -154,7 +176,7 @@ export default function GameBoyControls({ disabled }: { disabled: boolean }) {
 
     function finish() {
       held.current.delete(control);
-      setButton(control, false);
+      syncPad();
     }
 
     const remaining = minimumPressMs - (performance.now() - entry.startedAt);
@@ -168,7 +190,7 @@ export default function GameBoyControls({ disabled }: { disabled: boolean }) {
       type: "button" as const,
       disabled,
       "aria-label": controlLabels[control],
-      "data-pressed": keys[control] || pad[control] || undefined,
+      "data-pressed": keys[control] || pad.has(control) || undefined,
       onPointerDown(event: PointerEvent<HTMLButtonElement>) {
         if (event.button !== 0) return;
         event.currentTarget.setPointerCapture(event.pointerId);

@@ -1,4 +1,14 @@
-# React + TypeScript + Vite
+# Cloudboy Color
+
+Run `bun install` and `bun run dev`. Load a Game Boy or Game Boy Color ROM, then use **Connect to Agent** to hand over the controls. Disconnect or press a game control to take back over. The model sees the current frame and the last six decisions and outcomes. It can wait and watch the screen between inputs, and stops after three button decisions without progress.
+
+Qwen makes each gameplay decision from the moment you connect, using the current LCD frame, cartridge header title, and recent input outcomes. Run `bunx wrangler login` before starting Vite to enable Workers AI. If Wrangler has multiple accounts, set `CLOUDFLARE_ACCOUNT_ID` in an ignored `.env.local` file. Bring your own ROM. Cartridge files and saves stay in the browser.
+
+See [production rate limiting](docs/agent-production.md) for the work needed to enable the gameplay route on a public deployment.
+
+The app is available under the [MIT License](LICENSE). Third-party components follow their respective licenses.
+
+## React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 

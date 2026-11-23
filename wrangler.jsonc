@@ -7,8 +7,19 @@
 	"name": "cloudflare-gameboy-agent",
 	"main": "worker/index.ts",
 	"compatibility_date": "2026-11-19",
+	"compatibility_flags": ["nodejs_compat"],
+	"durable_objects": {
+		"bindings": [
+			{ "name": "GameplayAgent", "class_name": "GameplayAgent" }
+		]
+	},
+	"migrations": [
+		{ "tag": "v1", "new_sqlite_classes": ["GameplayAgent"] }
+	],
+	"ai": { "binding": "AI", "remote": true },
 	"assets": {
-		"not_found_handling": "single-page-application"
+		"not_found_handling": "single-page-application",
+		"run_worker_first": ["/agents/*"]
 	},
 	"observability": {
 		"enabled": true
