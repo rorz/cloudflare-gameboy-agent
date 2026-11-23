@@ -1,0 +1,135 @@
+diff --git a/dist/mgba/mgba.core.js b/dist/mgba/mgba.core.js
+index 7de9cc6a576cb2a3e2d8a49ee2c3708c80e25d47..7770a1e03d4bad58604466cffb624455793e7640 100644
+--- a/dist/mgba/mgba.core.js
++++ b/dist/mgba/mgba.core.js
+@@ -563,27 +563,16 @@ export async function createMgbaCore(init) {
+     let wallClockFrames = 0;
+     let wallClockStart = 0;
+     let persistTimer = null;
+-    // Audio-clocked pacing only works while the audio clock actually advances.
+-    // A context can report `running` and still never render a quantum when there
+-    // is no output device (headless browsers, VMs without a sound card), and
+-    // then the buffer deficit never reappears and the picture freezes for good.
+-    // Watch AudioContext.currentTime and treat a clock that has not moved for
+-    // half a second as stalled, so pacing falls back to the wall clock.
++    // Fall back to the wall clock when the worklet stops consuming samples.
+     const AUDIO_STALL_MS = 500;
+-    let audioClockTime = -1;
+-    let audioClockWall = 0;
+-    let audioStalled = false;
+-    const audioClockAdvancing = (now) => {
+-        const t = audioCtx.currentTime;
+-        if (t !== audioClockTime) {
+-            audioClockTime = t;
+-            audioClockWall = now;
+-            audioStalled = false;
++    let lastConsumedFrames = -1;
++    let audioProgressAt = 0;
++    const audioIsConsuming = (now) => {
++        if (consumedFrames !== lastConsumedFrames) {
++            lastConsumedFrames = consumedFrames;
++            audioProgressAt = now;
+         }
+-        else if (now - audioClockWall > AUDIO_STALL_MS) {
+-            audioStalled = true;
+-        }
+-        return !audioStalled;
++        return now - audioProgressAt < AUDIO_STALL_MS;
+     };
+     const drainAudio = () => {
+         // Short reads are the norm: the sample count a frame produces wobbles
+@@ -592,10 +581,13 @@ export async function createMgbaCore(init) {
+             const frames = mod._mgbawasm_read_audio(audioPtr, AUDIO_SCRATCH_FRAMES);
+             if (frames <= 0)
+                 return;
+-            const start = audioPtr >> 1;
+-            const chunk = mod.HEAP16.slice(start, start + frames * 2);
+-            sink.port.postMessage(chunk, [chunk.buffer]);
+-            enqueuedFrames += frames;
++            // Keep the worklet queue bounded while audio is suspended or stalled.
++            if (audioCtx.state === 'running' && enqueuedFrames - consumedFrames < coreRate * TARGET_SECONDS) {
++                const start = audioPtr >> 1;
++                const chunk = mod.HEAP16.slice(start, start + frames * 2);
++                sink.port.postMessage(chunk, [chunk.buffer]);
++                enqueuedFrames += frames;
++            }
+             if (frames < AUDIO_SCRATCH_FRAMES)
+                 return;
+         }
+@@ -613,7 +605,7 @@ export async function createMgbaCore(init) {
+         pollGamepads();
+         const rate = syncCoreRate();
+         let frames = 0;
+-        if (audioCtx.state === 'running' && audioClockAdvancing(now)) {
++        if (audioCtx.state === 'running' && audioIsConsuming(now)) {
+             const buffered = enqueuedFrames - consumedFrames;
+             const deficit = Math.round(rate * TARGET_SECONDS) - buffered;
+             const perEmulatedFrame = rate / framerate;
+diff --git a/src/mgba.core.ts b/src/mgba.core.ts
+index a00d3ecd90eaab036c40c1606ceeb65c556df395..21e3638c01405dc8be0733f2c64f61902cd0be0a 100644
+--- a/src/mgba.core.ts
++++ b/src/mgba.core.ts
+@@ -713,27 +713,17 @@ export async function createMgbaCore(init: MgbaCoreInit): Promise<MgbaCore> {
+   let wallClockStart = 0;
+   let persistTimer: ReturnType<typeof setInterval> | null = null;
+ 
+-  // Audio-clocked pacing only works while the audio clock actually advances.
+-  // A context can report `running` and still never render a quantum when there
+-  // is no output device (headless browsers, VMs without a sound card), and
+-  // then the buffer deficit never reappears and the picture freezes for good.
+-  // Watch AudioContext.currentTime and treat a clock that has not moved for
+-  // half a second as stalled, so pacing falls back to the wall clock.
++  // Fall back to the wall clock when the worklet stops consuming samples.
+   const AUDIO_STALL_MS = 500;
+-  let audioClockTime = -1;
+-  let audioClockWall = 0;
+-  let audioStalled = false;
+-
+-  const audioClockAdvancing = (now: number): boolean => {
+-    const t = audioCtx.currentTime;
+-    if (t !== audioClockTime) {
+-      audioClockTime = t;
+-      audioClockWall = now;
+-      audioStalled = false;
+-    } else if (now - audioClockWall > AUDIO_STALL_MS) {
+-      audioStalled = true;
++  let lastConsumedFrames = -1;
++  let audioProgressAt = 0;
++
++  const audioIsConsuming = (now: number): boolean => {
++    if (consumedFrames !== lastConsumedFrames) {
++      lastConsumedFrames = consumedFrames;
++      audioProgressAt = now;
+     }
+-    return !audioStalled;
++    return now - audioProgressAt < AUDIO_STALL_MS;
+   };
+ 
+   const drainAudio = (): void => {
+@@ -742,10 +732,13 @@ export async function createMgbaCore(init: MgbaCoreInit): Promise<MgbaCore> {
+     for (;;) {
+       const frames = mod._mgbawasm_read_audio(audioPtr, AUDIO_SCRATCH_FRAMES);
+       if (frames <= 0) return;
+-      const start = audioPtr >> 1;
+-      const chunk = mod.HEAP16.slice(start, start + frames * 2);
+-      sink.port.postMessage(chunk, [chunk.buffer]);
+-      enqueuedFrames += frames;
++      // Keep the worklet queue bounded while audio is suspended or stalled.
++      if (audioCtx.state === 'running' && enqueuedFrames - consumedFrames < coreRate * TARGET_SECONDS) {
++        const start = audioPtr >> 1;
++        const chunk = mod.HEAP16.slice(start, start + frames * 2);
++        sink.port.postMessage(chunk, [chunk.buffer]);
++        enqueuedFrames += frames;
++      }
+       if (frames < AUDIO_SCRATCH_FRAMES) return;
+     }
+   };
+@@ -766,7 +759,7 @@ export async function createMgbaCore(init: MgbaCoreInit): Promise<MgbaCore> {
+     const rate = syncCoreRate();
+ 
+     let frames = 0;
+-    if (audioCtx.state === 'running' && audioClockAdvancing(now)) {
++    if (audioCtx.state === 'running' && audioIsConsuming(now)) {
+       const buffered = enqueuedFrames - consumedFrames;
+       const deficit = Math.round(rate * TARGET_SECONDS) - buffered;
+       const perEmulatedFrame = rate / framerate;

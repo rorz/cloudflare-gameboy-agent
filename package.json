@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.5",
+    "@wasm-gaming/mgba-wasm": "0.3.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "tailwindcss": "^4.3.5"
@@ -27,5 +28,8 @@
     "typescript": "~7.0.2",
     "vite": "^8.3.6",
     "wrangler": "^4.166.0"
+  },
+  "patchedDependencies": {
+    "@wasm-gaming/mgba-wasm@0.3.1": "patches/@wasm-gaming%2Fmgba-wasm@0.3.1.patch"
   }
 }
